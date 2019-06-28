@@ -1,0 +1,15 @@
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample.csprojAssemblyReference.cache
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\MainWindow.g.cs
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\App.g.cs
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample_MarkupCompile.cache
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample_MarkupCompile.lref
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\bin\Debug\JSONExample.exe.config
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\bin\Debug\JSONExample.exe
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\bin\Debug\JSONExample.pdb
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\MainWindow.baml
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample.g.resources
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample.Properties.Resources.resources
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample.csproj.GenerateResource.cache
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample.csproj.CoreCompileInputs.cache
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample.exe
+C:\Users\gobbe\source\repos\JSONExample\JSONExample\obj\Debug\JSONExample.pdb
