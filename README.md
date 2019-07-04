@@ -18,7 +18,7 @@ public class SomeData
 Usage:
 
 ```csharp
-SomeData datatoconvert = new SomeData();
+SomeData datatoconvert = new SomeData(){Name = "Foo", Age = 58};
 
 string json = JSON.toJSONString(data);
 
