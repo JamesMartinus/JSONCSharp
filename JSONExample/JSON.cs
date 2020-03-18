@@ -3,362 +3,167 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 
 namespace JSONExample
 {
-    public class Recursive
+    public class JSONsharp
     {
-        public Dictionary<string, List<string>> Values { get; set; } = new Dictionary<string, List<string>>();
-        public string Value { get; set; }
-        public Recursive Replace(string name, string pattern) => Replace(this, name, pattern);
-        public static Recursive Replace(string name, string pattern, string text) => Replace(new Recursive() { Value = text }, name, pattern);
-        private static Recursive Replace(Recursive r, string name, string pattern)
+        private static object _FromString(string str)
         {
-            List<string> vals = new List<string>();
-            r.Value = Regex.Replace(r.Value, pattern, (m) =>
+            var _values = new Dictionary<string, object>();
+            var _char = new Dictionary<string, string>() { { "[", "]" }, { "{", "}" } };
+            Func<string, MatchCollection> _m = s => Regex.IsMatch(s, @"[[\]{}]") ? Regex.Matches(s, @"[[\]{}]") : null;
+            str = Regex.Replace(str, @"(?<!\\)""(.*?)(?<!\\)""|(\d+)", m =>
             {
-                vals.Add(m.Groups[1].Value);
-                return name + (vals.Count - 1);
+                var name = "V" + _values.Count;
+                var _value = String.IsNullOrEmpty(m.Groups[1].Value) ? m.Groups[2].Value : m.Groups[1].Value;
+                if (double.TryParse(_value, out var result)) _values.Add(name, result); else _values.Add(name, _value);
+                return name;
             });
-            r.Values.Add(name, vals);
-            return r;
-        }
-    }
-    public class JSON
-    {
-        public static JSONObject Parse(string text)
-        {
-            text = Regex.Replace(text, @"[\t\r\n]", "");
-
-            var Properties = Recursive.Replace("P", @"(?<=[{,\[]\s*)(?<!\\)""([\w-]+)(?<!\\)""(?=\s*:)", text).
-                Replace("S", @"(?<!\\)""(.*?)(?<!\\)""(?=,|}|])");
-
-            Match getMatch(string subject, string pattern) => Regex.IsMatch(subject, pattern) ? Regex.Match(subject, pattern) : null;
-            IEnumerable<Match> getMatches(string subject, string pattern) => Regex.IsMatch(subject, pattern) ? Regex.Matches(subject, pattern).OfType<Match>() : null;
-            JSONSequencer extractBrackets(string subject)
+            T _TakeFromValues<T>(string index)
             {
-                var sequencer = new JSONSequencer();
-                var r = @"[{\[]";
-                for (var e = getMatch(subject, r); e != null; e = getMatch(subject, r))
+                var _value = _values[index];
+                _values.Remove(index);
+                return (T)_value;
+            }
+            string _Extract(string json)
+            {
+                for (var reg = _m(json); reg != null; reg = _m(json))
                 {
-                    var brackets = getMatches(subject.Substring(e.Index + 1), e.Value == "{" ? @"[{}]" : @"[\[\]]").ToList();
-                    var end = brackets.Where(x => Regex.IsMatch(x.Value, @"[}\]]")).
-                        FirstOrDefault(x => brackets.Where(y => Regex.IsMatch(y.Value, @"[{\[]") && y.Index < x.Index).Count() == brackets.Where(y => Regex.IsMatch(y.Value, @"[}\]]") && y.Index < x.Index).Count());
-                    if (end == null) throw new JSONException(e.Value, text, subject);
-                    var subst = subject.Substring(e.Index + 1).Substring(0, end.Index);
-                    if (e.Value == "{") sequencer.Objects.Add(extractBrackets(subst)); else sequencer.Arrays.Add(extractBrackets(subst));
-                    subject = subject.Substring(0, e.Index) + (e.Value == "{" ? "O" + (sequencer.Objects.Count - 1) : "L" + (sequencer.Arrays.Count - 1)) + subject.Substring(end.Index + e.Index + 2);
+                    if (reg.Count % 2 != 0) throw new Exception("JSON is not formatted properly (missing a closing bracket?)");
+                    var start = reg[0];
+                    var openers = reg.OfType<Match>().Where(x => x.Value == start.Value).ToList();
+                    var closers = reg.OfType<Match>().Where(x => x.Value == _char[start.Value]).ToList();
+                    var end = closers.FirstOrDefault(x =>
+                    {
+                        var _counter = new Func<Match, bool>(a => a.Index > start.Index && a.Index < x.Index);
+                        return openers.Count(_counter) == closers.Count(_counter);
+                    });
+                    if (end == null) throw new Exception("Couldn't find the closing bracket for some reason");
+                    var _extraction = _Extract(json.Substring(start.Index + 1, end.Index - 1 - start.Index));
+                    var _OName = "V" + _values.Count;
+                    if (start.Value == "{")
+                    {
+                        _values.Add(_OName, Regex.Matches(_extraction, @"(V[0-9]+)\s*:\s*(V[0-9]+)").OfType<Match>()
+                            .Select(x => new { Key = _TakeFromValues<string>(x.Groups[1].Value), Value = _TakeFromValues<object>(x.Groups[2].Value) }).ToDictionary(x => x.Key, x => x.Value));
+                    }
+                    else if (start.Value == "[")
+                        _values.Add(_OName, _extraction.Split(',').Select((x, i) => new { Key = i, Value = _TakeFromValues<object>(x.Replace(" ", "")) }).ToDictionary(x => x.Key, x => x.Value));
+                    json = json.Substring(0, start.Index) + _OName + json.Substring(end.Index + 1);
                 }
-                sequencer.SequenceString = subject;
-                return sequencer;
+                return json;
             }
-
-            var ObjectPoly = extractBrackets(Regex.Replace(Properties.Value, @"\s", ""));
-            object getValue(JSONSequencer obj, string type, string number)
+            _Extract(str);
+            if (_values.Count > 1) throw new Exception("Not properly formatted, JSON requires a containing Object or Array");
+            return _values.FirstOrDefault().Value;
+        }
+        public static T FromJSON<T>(string json)
+        {
+            object _convert(Type type, object target)
             {
-                if (String.IsNullOrEmpty(type) && String.IsNullOrEmpty(number)) return null;
-                switch (type)
+                var _target = target.GetType();
+                if (type != _target)
                 {
-                    case "O": return formObject(obj.Objects[int.Parse(number)]);
-                    case "S": return Properties.Values["S"][int.Parse(number)];
-                    case "L": return formList(obj.Arrays[int.Parse(number)]);
-                    case "null": return null;
-                    case "true": return true;
-                    case "false": return false;
-                    default: return double.Parse(number);
+                    if (_target.GetInterface("IDictionary") != null)
+                    {
+                        var _type = _target.GetGenericArguments()[0];
+                        var _iscollection = (type.IsArray || type.GetInterface("ICollection") != null || type.GetInterface("IEnumerable") != null);
+                        if (_type == typeof(int) && _iscollection)
+                        {
+                            var innerType = type.IsArray ? type.GetElementType() : type.GetGenericArguments()[0];
+                            var list = ((Dictionary<int, object>)target).Values.Select((x, i) => new { index = i, value = _convert(innerType, x) }).ToList();
+                            var _ctor = Activator.CreateInstance(type, new object[] { list.Count });
+                            var _add = _ctor.GetType().GetMethods().FirstOrDefault(x => x.Name == "Add" || x.Name == "SetValue");
+                            var _params = _add.GetParameters().Length;
+                            foreach (var item in list) _add.Invoke(_ctor, _params > 1 ? new object[] { item.value, item.index } : new object[] { item.value });
+                            return _ctor;
+                        }
+                        else if (_type == typeof(string) && !_iscollection)
+                        {
+                            var _ctor = Activator.CreateInstance(type);
+                            var _jsonobject = (Dictionary<string, object>)target;
+                            foreach (var x in type.GetProperties())
+                            {
+                                var _attribute = x.GetCustomAttributes(typeof(ConvertAttribute), true).OfType<ConvertAttribute>().FirstOrDefault();
+                                var Name = _attribute != null && _attribute.NewName != null ? _attribute.NewName : x.Name;
+                                if (!_jsonobject.ContainsKey(Name) || (_attribute != null && (_attribute.Ignore == ConvertAttribute.ConvertIgnore.Both || _attribute.Ignore == ConvertAttribute.ConvertIgnore.In))) continue;
+                                var Method = _attribute != null && _attribute.ConvertIn != null ? type.GetMethod(_attribute.ConvertIn) : null;
+                                if (Method != null)
+                                {
+                                    if (Method.GetParameters().Length < 1) throw new Exception("Method requires at least one parameter");
+                                    if (Method.GetParameters()[0].ParameterType != typeof(string)) throw new Exception("Parameter must be of type string");
+                                    if (Method.ReturnType != typeof(object)) throw new Exception("Return Type must be of type object");
+                                }
+                                var Value = Method != null ? Method.Invoke(_ctor, new object[] { _convert(x.PropertyType, _jsonobject[Name]) }) : _convert(x.PropertyType, _jsonobject[Name]);
+                                x.SetValue(_ctor, Value);
+                            }
+                            return _ctor;
+                        }
+                        else return null;
+                    }
+                    else if (type.IsValueType && _target == typeof(double))
+                        return Convert.ChangeType(target, type);
+                    else if (type.IsEnum && _target == typeof(string))
+                        return type.GetEnumValues().OfType<Enum>().FirstOrDefault(x => x.ToString() == (string)target);
+                    else return null;
                 }
+                else
+                    return target;
             }
-            JSONObject formObject(JSONSequencer obj) => new JSONObject(getMatches(obj.SequenceString, @"P([0-9]+):([A-z]*)([0-9]*)").ToDictionary(x => Properties.Values["P"][int.Parse(x.Groups[1].Value)], x => getValue(obj, x.Groups[2].Value, x.Groups[3].Value)));
-            JSONList formList(JSONSequencer obj) => new JSONList(getMatches(obj.SequenceString, @"(?:^|,)([A-z]*)([0-9]*)").Select(x => getValue(obj, x.Groups[1].Value, x.Groups[2].Value)).ToList());
-            return formObject(ObjectPoly.Objects[0]);
+            return (T)_convert(typeof(T), _FromString(json));
         }
-
-        public static T Parse<T>(string text)
-        {
-            return JSONConverter.ConvertFromJSONType<T>(Parse(text));
-        }
-        public static JSONObject ConvertTo(object target)
-        {
-            var c = JSONConverter.ConvertToJSONType(target);
-            if (c.GetType() == typeof(JSONObject)) return (JSONObject)c; else return null;
-        }
-        public static JSONList ConvertTo(IEnumerable target)
-        {
-            var c = JSONConverter.ConvertToJSONType(target);
-            if (c.GetType() == typeof(JSONList)) return (JSONList)c; else return null;
-        }
-        public static string ToJSONString(object target)
-        {
-            var c = JSONConverter.ConvertToJSONType(target);
-            if (c.GetType() == typeof(JSONObject)) return ((JSONObject)c).ToJSONString();
-            if (c.GetType() == typeof(JSONList)) return ((JSONList)c).ToJSONString();
-            return null;
-        }
-        public static string ToJSONCommandSchema<T>()
-        {
-            string getAsserted(Type type)
-            {
-                var m = Type.GetTypeCode(type).ToString();
-                if (typeof(TypeCode).GetEnumNames().Skip(5).TakeWhile((x, a) => a < 11).Contains(m)) return "number";
-                if (m == "String") return "string";
-                if (m == "Boolean") return "boolean";
-                if (m == "Object" && type.GetInterfaces().FirstOrDefault(x => x.Name == "ICollection" || x.Name == "IEnumerable") != null) return "Array";
-                return "object";
-            }
-            return typeof(T).GetProperties().Aggregate("", (a, c) => a + " -" + c.Name + " " + getAsserted(c.PropertyType));
-        }
-
-    }
-
-
-    public class JSONConverter
-    {
-        public static string ToJSONString(object target)
+        public static string ToJSON(object target)
         {
             if (target == null) return "null";
+            var type = target.GetType();
+            var _typecode = Type.GetTypeCode(type);
+            var _string = "";
+            if (_typecode == TypeCode.Object)
+            {
+                if (type.IsArray || type.GetInterface("ICollection") != null || type.GetInterface("IEnumerable") != null)
+                {
+                    _string += "[";
+                    foreach (var item in (ICollection)target) _string += ToJSON(item) + (_string != "[" ? "," : "");
+                    _string += "]";
+                }
+                else
+                {
+                    return "{" + string.Join(",", type.GetProperties().Select(x =>
+                    {
+                        var toot = x.GetCustomAttributes(typeof(ConvertAttribute), true).OfType<ConvertAttribute>().FirstOrDefault();
+                        if (toot != null && (toot.Ignore == ConvertAttribute.ConvertIgnore.Both || toot.Ignore == ConvertAttribute.ConvertIgnore.Out)) return "";
+                        var method = toot != null && toot.ConvertOut != null ? type.GetMethods().FirstOrDefault(y => y.Name == toot.ConvertOut) : null;
+                        if (method != null)
+                        {
+                            if (method.GetParameters().Length < 1) throw new Exception("Method must have a parameter");
+                            if (method.GetParameters()[0].ParameterType != typeof(object)) throw new Exception("First parameter must be of type object");
+                            if (method.ReturnType != typeof(string)) throw new Exception("Method needs to have a return type of string");
+                        }
+                        var Name = toot != null && !string.IsNullOrEmpty(toot.NewName) ? toot.NewName : x.Name;
+                        var Value = method != null ? (string)method.Invoke(target, new object[] { x.GetValue(target) }) : ToJSON(x.GetValue(target));
+                        return "\"" + Name + "\"" + ":" + Value;
+                    }).Where(x => !string.IsNullOrEmpty(x))) + "}";
+                }
+            }
             else
             {
-                var itemType = target.GetType();
-                if (itemType == typeof(string)) return "\"" + target + "\"";
-                else if (itemType == typeof(JSONObject)) return ((JSONObject)target).ToJSONString();
-                else if (itemType == typeof(JSONList)) return ((JSONList)target).ToJSONString();
-                else if (itemType == typeof(bool)) return ((bool)target) ? "true" : "false";
-                else return target.ToString();
+                return "\"" + (
+                    (type == typeof(bool)) ? (((bool)target) ? "true" : "false") :
+                    (type == typeof(string)) ? (string)target :
+                    (type.IsEnum) ? type.GetEnumName(target) : target.ToString()
+                    ) + "\"";
             }
+            return _string;
         }
-        public static object ConvertFromJSONType(Type ConvertTo, object target)
+        [System.AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = true)]
+        public class ConvertAttribute : Attribute
         {
-            if (target != null && ConvertTo != target.GetType())
-                if (ConvertTo.IsValueType && target.GetType() == typeof(double)) return Convert.ChangeType(target, ConvertTo);
-                else if ((ConvertTo.IsArray || ConvertTo.GetInterface("ICollection") != null || ConvertTo.GetInterface("IEnumerable") != null) && target.GetType() == typeof(JSONList))
-                {
-                    Type innerType = ConvertTo.IsArray ? ConvertTo.GetElementType() : ConvertTo.GetGenericArguments()[0];
-                    var enumerable = ((JSONList)target).Select(x => ConvertFromJSONType(innerType, x)).ToList();
-                    var lst = Activator.CreateInstance(ConvertTo, new object[] { enumerable.Count });
-                    var mths = lst.GetType().GetMethods().FirstOrDefault(x => x.Name == "Add" || x.Name == "SetValue");
-                    int count = 0;
-                    if (mths != null)
-                        foreach (var i in enumerable)
-                            if (mths.Name == "Add") mths.Invoke(lst, new object[] { i });
-                            else if (mths.Name == "SetValue") mths.Invoke(lst, new object[] { i, count++ });
-                    return lst;
-                }
-                else if (target.GetType() == typeof(JSONObject))
-                {
-                    var instance = Activator.CreateInstance(ConvertTo);
-                    var table = ConvertTo.GetInterface("IJSONConverter") != null ? ((IJSONConverter)instance).ConversionTable : new JSONConversionTable(instance);
-                    table.FromJSON((JSONObject)target);
-                    return instance;
-                }
-                else if (ConvertTo.IsEnum && target.GetType() == typeof(string))
-                    return ConvertTo.GetEnumValues().OfType<Enum>().FirstOrDefault(x => x.ToString() == (string)target);
-                else return null;
-            return target;
-        }
-        public static T ConvertFromJSONType<T>(object target)
-        {
-            var converted = ConvertFromJSONType(typeof(T), target);
-            return (converted != null && converted.GetType() == typeof(T)) ? (T)converted : default(T);
-        }
-        public static object ConvertToJSONType(object target)
-        {
-            if (target == null) return null;
-            var t = target.GetType();
-            if (t == typeof(string) || t == typeof(bool)) return target;
-            if (t.IsEnum) return t.GetEnumName(target);
-            if (typeof(TypeCode).GetEnumNames().Skip(5).Take(11).Contains(Type.GetTypeCode(t).ToString())) return Convert.ToInt32(target);
-
-            if (t.IsArray || target.GetType().GetInterface("IEnumerable") != null || target.GetType().GetInterface("ICollection") != null)
-            {
-                var list = new JSONList();
-                foreach (var item in (ICollection)target) list.Add(ConvertToJSONType(item));
-                return list;
-            }
-            return (t.GetInterface("IJSONConverter") != null ? ((IJSONConverter)target).ConversionTable : new JSONConversionTable(target)).ToJSON();
-        }
-        public static JSONObject FromXML(XDocument xdoc, string TagKey = "tag", string ChildKey = "children", string TextKey = "value")
-        {
-            JSONObject makeJSONObject(XElement element)
-            {
-                if (element == null) return null;
-                var jsonbject = new JSONObject { [TagKey] = element.Name.LocalName };
-                element.Attributes().ToList().ForEach(x => jsonbject.Add(x.Name.LocalName, x.Value));
-                var ChildList = new JSONList();
-                foreach (var child in element.Elements())
-                {
-                    if (!child.HasAttributes && child.HasElements) // list
-                    {
-                        var lst = new JSONList();
-                        foreach (var el in child.Elements().Select(x => makeJSONObject(x))) lst.Add(el);
-                        jsonbject.Add(child.Name.LocalName, lst);
-                    }
-                    else ChildList.Add(makeJSONObject(child));
-                }
-                if (!string.IsNullOrEmpty(element.Value)) jsonbject[TextKey] = element.Value;
-                if (ChildList.Count > 0) jsonbject[ChildKey] = ChildList;
-                return jsonbject;
-            }
-            return makeJSONObject(xdoc.Elements().FirstOrDefault());
-        }
-    }
-    public class JSONSequencer
-    {
-        public List<JSONSequencer> Objects { get; set; } = new List<JSONSequencer>();
-        public List<JSONSequencer> Arrays { get; set; } = new List<JSONSequencer>();
-        public string SequenceString { get; set; }
-    }
-    public class JSONObject : Dictionary<string, object>
-    {
-        public JSONObject() { }
-        public JSONObject(Dictionary<string, object> pass) => pass.Keys.ToList().ForEach(x => Add(x, pass[x]));
-        public string ToJSONString()
-        {
-            var jsonstring = "{";
-            foreach (var key in Keys)
-                jsonstring += "\"" + key + "\":" + JSONConverter.ToJSONString(this[key]) + ",";
-            return jsonstring.TrimEnd(',') + "}";
-        }
-        public XDocument ToXDocument(string TagKey = "tag", string ChildKey = "children")
-        {
-            XElement fromObject(JSONObject obj)
-            {
-                if (obj == null) return null;
-                var tag = obj.ContainsKey(TagKey) ? obj[TagKey].ToString() : "Object";
-                var el = new XElement(tag);
-                var sorted = obj.GroupBy(x => x.Value.GetType() == typeof(JSONList) ? "List" : x.Value.GetType() == typeof(JSONObject) ? "Object" : "Attribute").ToDictionary(x => x.Key, x => x.ToList());
-                if (sorted.ContainsKey("Attribute")) sorted["Attribute"].ForEach(x => { if (x.Key != TagKey) el.SetAttributeValue(x.Key, x.Value); });
-                if (sorted.ContainsKey("List")) sorted["List"].ForEach(x =>
-                {
-                    var lst = fromList((JSONList)x.Value);
-                    if (x.Key == ChildKey)
-                    {
-                        lst.ForEach(y => el.Add(y));
-                    }
-                    else
-                    {
-                        var chld = new XElement(x.Key);
-                        lst.ForEach(y => chld.Add(y));
-                        el.Add(chld);
-                    }
-                });
-                if (sorted.ContainsKey("Object")) sorted["Object"].ForEach(x =>
-                {
-                    var childEl = new XElement(x.Key);
-                    childEl.Add(fromObject((JSONObject)x.Value));
-                    el.Add(childEl);
-                });
-                return el;
-            }
-            List<XElement> fromList(JSONList list)
-            {
-                if (list == null) return null;
-                return list.Where(y => y != null).Select(y =>
-                {
-                    if (y.GetType() == typeof(JSONList))
-                    {
-                        var childList = new XElement("List");
-                        fromList((JSONList)y).ForEach(x => childList.Add(x));
-                        return childList;
-                    }
-                    else if (y.GetType() == typeof(JSONObject)) return fromObject((JSONObject)y);
-                    else return new XElement(y.GetType().Name + ":" + y.GetType().AssemblyQualifiedName) { Value = y.ToString() };
-                }).ToList();
-            }
-            var doc = new XDocument();
-            doc.Add(fromObject(this));
-            return doc;
-        }
-        public T ConvertTo<T>() => JSONConverter.ConvertFromJSONType<T>(this);
-    }
-    public class JSONList : List<object>
-    {
-        public JSONList() { }
-        public JSONList(List<object> pass) => AddRange(pass);
-        public string ToJSONString()
-        {
-            var jsonstring = "[";
-            foreach (var item in this)
-                jsonstring += JSONConverter.ToJSONString(item) + ",";
-            return jsonstring.TrimEnd(',') + "]";
-        }
-    }
-
-    public interface IJSONConverter { JSONConversionTable ConversionTable { get; set; } }
-
-    public enum JSONConversionDirection { toJSON, fromJSON, Both }
-
-    public class JSONConversion
-    {
-        public Func<JSONConversionDirection, object, object> ConversionDelegate { get; set; }
-        public Action<JSONConversionDirection, object> ApplyAction { get; set; }
-        public string JSONName { get; set; }
-        public string PropertyName { get; set; }
-        public bool Ignore { get; set; } = false;
-        public JSONConversionDirection ConversionDirection { get; set; } = JSONConversionDirection.Both;
-        public JSONConversion() { }
-        public JSONConversion(string propertyname) => PropertyName = propertyname;
-    }
-
-    public class JSONDefaultConversion
-    {
-        public Func<string, JSONConversionDirection, object, object> GeneralConverter { get; set; }
-        public Action<string, JSONConversionDirection, object> GeneralAction { get; set; }
-        public bool Ignore { get; set; }
-        public JSONConversion AsJSONConversion(string name)
-        {
-            var conversion = new JSONConversion(name) { Ignore = Ignore };
-            if (GeneralAction != null) conversion.ApplyAction = (A, B) => GeneralAction(name, A, B);
-            if (GeneralConverter != null) conversion.ConversionDelegate = (A, B) => GeneralConverter(name, A, B);
-            return conversion;
-        }
-    }
-
-    public class JSONConversionTable : List<JSONConversion>
-    {
-        public JSONDefaultConversion DefaultConversion { get; set; } = new JSONDefaultConversion();
-        private object OwningObject { get; set; }
-        public JSONConversionTable(object owningobject) => OwningObject = owningobject;
-        public JSONObject ToJSON()
-        {
-            var type = OwningObject.GetType();
-            var j = new JSONObject();
-            foreach (var property in type.GetProperties().Where(x => x.Name != "ConversionTable"))
-            {
-                var conversion = this.FirstOrDefault(x => x.ConversionDirection != JSONConversionDirection.fromJSON && x.PropertyName == property.Name) ?? DefaultConversion.AsJSONConversion(property.Name);
-                conversion.ApplyAction?.Invoke(JSONConversionDirection.toJSON, property.GetValue(OwningObject));
-                if (conversion.Ignore) continue;
-                var name = conversion.JSONName ?? property.Name;
-                var value = conversion.ConversionDelegate != null ? conversion.ConversionDelegate(JSONConversionDirection.toJSON, property.GetValue(OwningObject)) : property.GetValue(OwningObject);
-                j.Add(name, JSONConverter.ConvertToJSONType(value));
-            }
-            return j;
-        }
-        public void FromJSON(JSONObject jsonobject)
-        {
-            foreach (var key in jsonobject.Keys.Where(x => x != "ConversionTable"))
-            {
-                var conversion = this.FirstOrDefault(x => x.ConversionDirection != JSONConversionDirection.toJSON && (x.JSONName == key || x.PropertyName == key)) ?? DefaultConversion.AsJSONConversion(key);
-                conversion.ApplyAction?.Invoke(JSONConversionDirection.fromJSON, jsonobject[key]);
-                if (conversion.Ignore) continue;
-                var property = OwningObject.GetType().GetProperty(conversion.PropertyName ?? key);
-                property?.SetValue(OwningObject, JSONConverter.ConvertFromJSONType(property.PropertyType, conversion.ConversionDelegate != null ? conversion.ConversionDelegate(JSONConversionDirection.fromJSON, jsonobject[key]) : jsonobject[key]));
-            }
-        }
-
-    }
-
-
-    public class JSONException : Exception
-    {
-        public string WholeString { get; set; }
-        public string SubString { get; set; }
-        public string BracketType { get; set; }
-        public JSONException(string type, string wholestring, string substring) : base("Parsing Error")
-        {
-            WholeString = wholestring;
-            SubString = substring;
-            BracketType = type;
+            public enum ConvertIgnore { Both, Out, In }
+            public string ConvertIn { get; set; }
+            public string ConvertOut { get; set; }
+            public ConvertIgnore Ignore { get; set; }
+            public string NewName { get; set; }
+            public ConvertAttribute() { }
         }
     }
 }

@@ -1,18 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace JSONExample
 {
@@ -43,13 +31,13 @@ namespace JSONExample
 
         private void ToJSONClick(object sender, RoutedEventArgs e)
         {
-            var o = (SomeObject)DataIN.SelectedItem;
-            Output.Text = JSON.ToJSONString(o);
+            if(DataIN.SelectedItem != null)
+            Output.Text = JSONsharp.ToJSON(DataIN.SelectedItem);
         }
 
         private void FromJSONClick(object sender, RoutedEventArgs e)
         {
-            var json =  JSON.Parse<SomeObject>(Output.Text);
+            var json =  JSONsharp.FromJSON<SomeObject>(Output.Text);
             if(json != null)
             {
                 ConvertedObjects.Add(json);
