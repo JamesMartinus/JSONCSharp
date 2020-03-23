@@ -81,7 +81,7 @@ public class ClassForConversion : JSONsharp.IJSONValueConverter
 
     // This property value will be converted through the converter but only from JSON (IJSONValueConverter Required)
     [JSONsharp.JSONProperty(JSONsharp.ConversionDirection.FromJSON)]
-    public string PropertyUsingConverterFromJSON { get; set; }  (The IJSONValueConverter Interface must be used)
+    public string PropertyUsingConverterFromJSON { get; set; }
 
     // This property will be converted through the converter but only to JSON (IJSONValueConverter Required)
     [JSONsharp.JSONProperty(JSONsharp.ConversionDirection.ToJSON)]
