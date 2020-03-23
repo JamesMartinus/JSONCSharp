@@ -90,12 +90,14 @@ public class ClassForConversion : JSONsharp.IJSONValueConverter
     // Generated from IJSONValueConverter
     public object ConvertFromJSON(string Name, object Value, PropertyInfo Property)
     {
-        return Value;
+        // make everything capitalised
+        return Value.ToString().ToUpper(); 
     }
     // Generated from IJSONValueConverter
     public string ConvertToJSON(string Name, object Value, PropertyInfo Property)
     {
-        return Value.ToString().Reverse().Aggregate("", (a, c) => a + c) ; // reverse the value
+        // reverse the value
+        return Value.ToString().Reverse().Aggregate("", (a, c) => a + c) ; 
     }
 }
 ```
