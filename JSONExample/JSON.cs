@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 
 namespace JSONExample
@@ -11,13 +12,15 @@ namespace JSONExample
         private static object _FromString(string str)
         {
             var _values = new Dictionary<string, object>();
+            var _count = 0;
             var _char = new Dictionary<string, string>() { { "[", "]" }, { "{", "}" } };
             Func<string, MatchCollection> _m = s => Regex.IsMatch(s, @"[[\]{}]") ? Regex.Matches(s, @"[[\]{}]") : null;
-            str = Regex.Replace(str, @"(?<!\\)""(.*?)(?<!\\)""|(\d+)", m =>
+            str = Regex.Replace(str, @"(?<!\\)""(.*?)(?<!\\)""|(\d+)|(null)", m =>
             {
-                var name = "V" + _values.Count;
-                var _value = String.IsNullOrEmpty(m.Groups[1].Value) ? m.Groups[2].Value : m.Groups[1].Value;
-                if (double.TryParse(_value, out var result)) _values.Add(name, result); else _values.Add(name, _value);
+                var name = "V" + _count++;
+                if (!string.IsNullOrEmpty(m.Groups[1].Value)) _values.Add(name, m.Groups[1].Value);
+                if (!string.IsNullOrEmpty(m.Groups[2].Value) && double.TryParse(m.Groups[2].Value, out var result)) _values.Add(name, result);
+                if (!string.IsNullOrEmpty(m.Groups[3].Value) && m.Groups[3].Value == "null") _values.Add(name, null);
                 return name;
             });
             T _TakeFromValues<T>(string index)
@@ -41,7 +44,7 @@ namespace JSONExample
                     });
                     if (end == null) throw new Exception("Couldn't find the closing bracket for some reason");
                     var _extraction = _Extract(json.Substring(start.Index + 1, end.Index - 1 - start.Index));
-                    var _OName = "V" + _values.Count;
+                    var _OName = "V" + _count++;
                     if (start.Value == "{")
                     {
                         _values.Add(_OName, Regex.Matches(_extraction, @"(V[0-9]+)\s*:\s*(V[0-9]+)").OfType<Match>()
@@ -57,10 +60,27 @@ namespace JSONExample
             if (_values.Count > 1) throw new Exception("Not properly formatted, JSON requires a containing Object or Array");
             return _values.FirstOrDefault().Value;
         }
+        private static List<(string Name, PropertyInfo property, bool IgnoreTo, bool IgnoreFrom, bool CustomConvertTo, bool CustomConvertFrom)> GetAttributeDefinitions(Type type)
+        {
+            var _class = type.GetCustomAttributes(false).OfType<JSONClassAttribute>().FirstOrDefault() ?? new JSONClassAttribute();
+            return type.GetProperties().Select(x =>
+            {
+
+                var _property = x.GetCustomAttributes(false).OfType<JSONPropertyAttribute>().FirstOrDefault() ?? new JSONPropertyAttribute(ConversionDirection.Default);
+                var _name = string.IsNullOrEmpty(_property.Alias) ? x.Name : _property.Alias;
+                var _ignoreFrom = _class.IgnoreAll ? !(_property.Ignore == IgnoreDirection.Neither || _property.Ignore == IgnoreDirection.ToJSON) : (_property.Ignore == IgnoreDirection.Both || _property.Ignore == IgnoreDirection.FromJSON);
+                var _ignoreTo = _class.IgnoreAll ? !(_property.Ignore == IgnoreDirection.Neither || _property.Ignore == IgnoreDirection.FromJSON) : (_property.Ignore == IgnoreDirection.Both || _property.Ignore == IgnoreDirection.ToJSON);
+                var _hasInterface = type.GetInterface("IJSONValueConverter") != null;
+                var _convertFrom = _hasInterface ? _class.CustomConvertOnAllProperties ? !(_property.CustomConverterDirection == ConversionDirection.Neither || _property.CustomConverterDirection == ConversionDirection.ToJSON) : (_property.CustomConverterDirection == ConversionDirection.Both || _property.CustomConverterDirection == ConversionDirection.FromJSON) : false;
+                var _convertTo = _hasInterface ? _class.CustomConvertOnAllProperties ? !(_property.CustomConverterDirection == ConversionDirection.Neither || _property.CustomConverterDirection == ConversionDirection.FromJSON) : (_property.CustomConverterDirection == ConversionDirection.Both || _property.CustomConverterDirection == ConversionDirection.ToJSON) : false;
+                return (_name, x, _ignoreTo, _ignoreFrom, _convertTo, _convertFrom);
+            }).ToList();
+        }
         public static T FromJSON<T>(string json)
         {
             object _convert(Type type, object target)
             {
+                if (target == null) return null;
                 var _target = target.GetType();
                 if (type != _target)
                 {
@@ -82,26 +102,16 @@ namespace JSONExample
                         {
                             var _ctor = Activator.CreateInstance(type);
                             var _jsonobject = (Dictionary<string, object>)target;
-                            foreach (var x in type.GetProperties())
+                            foreach (var p in GetAttributeDefinitions(type).Where(x => !x.IgnoreFrom && _jsonobject.ContainsKey(x.Name)))
                             {
-                                var _attribute = x.GetCustomAttributes(typeof(ConvertAttribute), true).OfType<ConvertAttribute>().FirstOrDefault();
-                                var Name = _attribute != null && _attribute.NewName != null ? _attribute.NewName : x.Name;
-                                if (!_jsonobject.ContainsKey(Name) || (_attribute != null && (_attribute.Ignore == ConvertAttribute.ConvertIgnore.Both || _attribute.Ignore == ConvertAttribute.ConvertIgnore.In))) continue;
-                                var Method = _attribute != null && _attribute.ConvertIn != null ? type.GetMethod(_attribute.ConvertIn) : null;
-                                if (Method != null)
-                                {
-                                    if (Method.GetParameters().Length < 1) throw new Exception("Method requires at least one parameter");
-                                    if (Method.GetParameters()[0].ParameterType != typeof(string)) throw new Exception("Parameter must be of type string");
-                                    if (Method.ReturnType != typeof(object)) throw new Exception("Return Type must be of type object");
-                                }
-                                var Value = Method != null ? Method.Invoke(_ctor, new object[] { _convert(x.PropertyType, _jsonobject[Name]) }) : _convert(x.PropertyType, _jsonobject[Name]);
-                                x.SetValue(_ctor, Value);
+                                var _value = p.CustomConvertFrom ? ((IJSONValueConverter)_ctor).ConvertFromJSON(p.Name, _jsonobject[p.Name], p.property) : _convert(p.property.PropertyType, _jsonobject[p.Name]);
+                                p.property.SetValue(_ctor, _value);
                             }
                             return _ctor;
                         }
                         else return null;
                     }
-                    else if (type.IsValueType && _target == typeof(double))
+                    else if (typeof(TypeCode).GetEnumNames().Skip(5).Take(11).Contains(Type.GetTypeCode(type).ToString()))
                         return Convert.ChangeType(target, type);
                     else if (type.IsEnum && _target == typeof(string))
                         return type.GetEnumValues().OfType<Enum>().FirstOrDefault(x => x.ToString() == (string)target);
@@ -122,27 +132,17 @@ namespace JSONExample
             {
                 if (type.IsArray || type.GetInterface("ICollection") != null || type.GetInterface("IEnumerable") != null)
                 {
-                    _string += "[";
-                    foreach (var item in (ICollection)target) _string += ToJSON(item) + (_string != "[" ? "," : "");
-                    _string += "]";
+                    var _l = new List<string>();
+                    foreach (var item in (ICollection)target) _l.Add(ToJSON(item));
+                    _string += "[" + string.Join(",", _l) + "]";
                 }
                 else
                 {
-                    return "{" + string.Join(",", type.GetProperties().Select(x =>
+                    return "{" + string.Join(",", GetAttributeDefinitions(type).Where(x => !x.IgnoreTo).Select(x =>
                     {
-                        var toot = x.GetCustomAttributes(typeof(ConvertAttribute), true).OfType<ConvertAttribute>().FirstOrDefault();
-                        if (toot != null && (toot.Ignore == ConvertAttribute.ConvertIgnore.Both || toot.Ignore == ConvertAttribute.ConvertIgnore.Out)) return "";
-                        var method = toot != null && toot.ConvertOut != null ? type.GetMethods().FirstOrDefault(y => y.Name == toot.ConvertOut) : null;
-                        if (method != null)
-                        {
-                            if (method.GetParameters().Length < 1) throw new Exception("Method must have a parameter");
-                            if (method.GetParameters()[0].ParameterType != typeof(object)) throw new Exception("First parameter must be of type object");
-                            if (method.ReturnType != typeof(string)) throw new Exception("Method needs to have a return type of string");
-                        }
-                        var Name = toot != null && !string.IsNullOrEmpty(toot.NewName) ? toot.NewName : x.Name;
-                        var Value = method != null ? (string)method.Invoke(target, new object[] { x.GetValue(target) }) : ToJSON(x.GetValue(target));
-                        return "\"" + Name + "\"" + ":" + Value;
-                    }).Where(x => !string.IsNullOrEmpty(x))) + "}";
+                        var Value = x.CustomConvertTo ? "\"" + ((IJSONValueConverter)target).ConvertToJSON(x.Name, x.property.GetValue(target), x.property) + "\"" : ToJSON(x.property.GetValue(target));
+                        return "\"" + x.Name + "\":" + Value;
+                    })) + "}";
                 }
             }
             else
@@ -155,15 +155,37 @@ namespace JSONExample
             }
             return _string;
         }
+        public enum IgnoreDirection { Default, Neither, Both, ToJSON, FromJSON }
+        public enum ConversionDirection { Default, Both, ToJSON, FromJSON, Neither }
         [System.AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = true)]
-        public class ConvertAttribute : Attribute
+        public class JSONPropertyAttribute : Attribute
         {
-            public enum ConvertIgnore { Both, Out, In }
-            public string ConvertIn { get; set; }
-            public string ConvertOut { get; set; }
-            public ConvertIgnore Ignore { get; set; }
-            public string NewName { get; set; }
-            public ConvertAttribute() { }
+            public ConversionDirection CustomConverterDirection { get; set; }
+            public IgnoreDirection Ignore { get; set; }
+            public string Alias { get; set; }
+            public JSONPropertyAttribute(IgnoreDirection ignore, ConversionDirection customconversiondirection, string alias)
+            {
+                Ignore = ignore;
+                CustomConverterDirection = customconversiondirection;
+                Alias = alias;
+            }
+            public JSONPropertyAttribute(IgnoreDirection ignore) => Ignore = ignore;
+            public JSONPropertyAttribute(ConversionDirection customconversiondirection) => CustomConverterDirection = customconversiondirection;
+            public JSONPropertyAttribute(string alias) => Alias = alias;
+        }
+
+        [System.AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+        public class JSONClassAttribute : Attribute
+        {
+            public bool CustomConvertOnAllProperties { get; set; }
+            public bool IgnoreAll { get; set; }
+            public JSONClassAttribute(bool AllConvert) => CustomConvertOnAllProperties = AllConvert;
+            public JSONClassAttribute() { }
+        }
+        public interface IJSONValueConverter
+        {
+            object ConvertFromJSON(string Name, object Value, PropertyInfo Property);
+            string ConvertToJSON(string Name, object Value, PropertyInfo Property);
         }
     }
 }
