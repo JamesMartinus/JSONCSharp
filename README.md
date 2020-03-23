@@ -99,7 +99,7 @@ public class ClassForConversion : JSONsharp.IJSONValueConverter
     }
 }
 ```
-Converting the object to a JSON string
+### Converting the object to a JSON string
 
 ```csharp
 // Creating the object
@@ -119,7 +119,7 @@ var str = JSONsharp.ToJSON(_test);
 
 ```
 
-Result (in JSON)
+### Result (in JSON)
 ```json
 {
     "NewAlias" : "foo",
@@ -130,7 +130,7 @@ Result (in JSON)
 }
 ```
 
-Example using the same class but Converting from JSON
+### Example using the same class but Converting from JSON
 ```csharp
 // Some Test JSON
 string JsonString = "{"
@@ -148,7 +148,7 @@ ClassForConversion ConvertedObject = JSONsharp.FromJSON<ClassForConversion>(Json
 Console.WriteLine(string.Join("\n", ConvertedObject.GetType().GetProperties().Select(x=>x.Name + " : " + x.GetValue(ConvertedObject))));
 ```
 
-Result
+### Result
 ```DOS
 GiveMeANewName : Some Value
 IgnoreMe : 
