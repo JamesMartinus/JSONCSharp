@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Windows;
 
 namespace JSONExample
@@ -9,52 +11,43 @@ namespace JSONExample
     /// </summary>
     public partial class MainWindow : Window
     {
-        ObservableCollection<SomeObject> SomeObjects = new ObservableCollection<SomeObject>() {
-            new SomeObject() {
-                AlistofObjects =new List<AnotherObject>() {
-                    new AnotherObject() {ANumber = 10, AString = "Hello"},
-                    new AnotherObject() {ANumber = 20, AString = "You"},
-                    new AnotherObject() {ANumber = 30, AString = "Person"},
-                },
-                 Name = "I'm a test Object",
-                 ANumber = 50,
-                 Someobject = new AnotherObject(){ ANumber = 20, AString = "More Tests" }
-            }
-        };
-        ObservableCollection<SomeObject> ConvertedObjects = new ObservableCollection<SomeObject>();
         public MainWindow()
         {
             InitializeComponent();
-            DataIN.ItemsSource = SomeObjects;
-            DataOUT.ItemsSource = ConvertedObjects;
-        }
 
-        private void ToJSONClick(object sender, RoutedEventArgs e)
-        {
-            if(DataIN.SelectedItem != null)
-            Output.Text = JSONsharp.ToJSON(DataIN.SelectedItem);
-        }
 
-        private void FromJSONClick(object sender, RoutedEventArgs e)
-        {
-            var json =  JSONsharp.FromJSON<SomeObject>(Output.Text);
-            if(json != null)
+            var _test = new ClassForConversion()
             {
-                ConvertedObjects.Add(json);
-            }
+                GiveMeANewName = "foo",
+                IgnoreMe = "You, won't see this",
+                IgnoreMeToJSON = "You won't see this either",
+                IgnoreMeFromJSON = "Converting from JSON Won't see this",
+                PropertyUsingConverterBothWays = "This was Converted using the methods",
+                PropertyUsingConverterFromJSON = "This was only converted from the string",
+                PropertyUsingConverterToJSON = "This was only converted from the object"
+            };
+
+            // Converting the Object
+            var str = JSONsharp.ToJSON(_test);
+
+            Console.WriteLine(str);
+
+
+            string JsonString = "{"
+                + "\"NewAlias\" : \"Some Value\","
+                + "\"IgnoreMe\" : \"This will be ignored completely\","
+                + "\"IgnoreMeToJSON\" : \"this won't be ignored\","
+                + "\"IgnoreMeFromJSON\" : \"This is going to be ignored\","
+                + "\"PropertyUsingConverterBothWays\" : \"This was passed through the ConvertFromJSON Method\","
+                + "\"PropertyUsingConverterFromJSON\" : \"This was also passed through the ConvertFromJSON Method\","
+                + "\"PropertyUsingConverterToJSON\" : \"This won't be converted\""
+                + "}";
+
+            ClassForConversion ConvertedObject = JSONsharp.FromJSON<ClassForConversion>(JsonString);
+
+            Console.WriteLine(string.Join("\n", ConvertedObject.GetType().GetProperties().Select(x => x.Name + " : " + x.GetValue(ConvertedObject))));
         }
+
     }
-    public class SomeObject
-    {
-        public string Name { get; set; }
-        public string SomethingElse { get; set; }
-        public int ANumber { get; set; }
-        public AnotherObject Someobject { get; set; }
-        public List<AnotherObject> AlistofObjects { get; set; }
-    }
-    public class AnotherObject
-    {
-        public string AString { get; set; }
-        public int ANumber { get; set; }
-    }
+    
 }
