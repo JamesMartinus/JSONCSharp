@@ -147,11 +147,14 @@ namespace JSONExample
             }
             else
             {
-                return "\"" + (
-                    (type == typeof(bool)) ? (((bool)target) ? "true" : "false") :
-                    (type == typeof(string)) ? (string)target :
-                    (type.IsEnum) ? type.GetEnumName(target) : target.ToString()
-                    ) + "\"";
+                return (
+                (type == typeof(bool)) ? (((bool)target) ? "\"true\"" : "\"false\"") :
+                (type == typeof(string)) ? "\"" + (string)target + "\"" :
+                (type.IsEnum) ? "\"" + type.GetEnumName(target) + "\"" :
+                  ((type == typeof(int) || type == typeof(uint) || type == typeof(byte) || type == typeof(long) || type == typeof(ulong) || type == typeof(short) || type == typeof(ushort)))
+                  ? target.ToString()
+               : "\"" + target.ToString() + "\""
+                );
             }
             return _string;
         }
