@@ -22,13 +22,13 @@ namespace JSONExample
                 IgnoreMe = "You, won't see this",
                 IgnoreMeToJSON = "You won't see this either",
                 IgnoreMeFromJSON = "Converting from JSON Won't see this",
-                PropertyUsingConverterBothWays = "This was Converted using the methods",
-                PropertyUsingConverterFromJSON = "This was only converted from the string",
-                PropertyUsingConverterToJSON = "This was only converted from the object"
+                PropertyUsingConverterBothWays = "This was converted from the converter",
+                PropertyUsingConverterFromJSON = "This was converted from the string",
+                PropertyUsingConverterToJSON = "This was converted from the object"
             };
 
             // Converting the Object
-            var str = JSONsharp.ToJSON(_test);
+            var str = JSONSharp.ToJSON(_test);
 
             Console.WriteLine(str);
 
@@ -43,9 +43,10 @@ namespace JSONExample
                 + "\"PropertyUsingConverterToJSON\" : \"This won't be converted\""
                 + "}";
 
-            ClassForConversion ConvertedObject = JSONsharp.FromJSON<ClassForConversion>(JsonString);
+            ClassForConversion ConvertedObject = JSONSharp.FromString<ClassForConversion>(JsonString);
 
             Console.WriteLine(string.Join("\n", ConvertedObject.GetType().GetProperties().Select(x => x.Name + " : " + x.GetValue(ConvertedObject))));
+
         }
 
     }

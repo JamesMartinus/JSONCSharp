@@ -7,47 +7,46 @@ using System.Threading.Tasks;
 
 namespace JSONExample
 {
-    public class ClassForConversion : JSONsharp.IJSONValueConverter
+    public class ClassForConversion : JSONSharp.IJSONValueConverter
     {
         // Use an alias for conversion
-        [JSONsharp.JSONProperty("NewAlias")]
+        [JSONSharp.JSONProperty("NewAlias")]
         public string GiveMeANewName { get; set; }
 
         // This property will not be converted at all//
-        [JSONsharp.JSONProperty(JSONsharp.IgnoreDirection.Both)]
+        [JSONSharp.JSONProperty(JSONSharp.IgnoreDirection.Both)]
         public string IgnoreMe { get; set; }
 
         // This property will be ignored during conversion FROM JSON
-        [JSONsharp.JSONProperty(JSONsharp.IgnoreDirection.FromJSON)]
+        [JSONSharp.JSONProperty(JSONSharp.IgnoreDirection.FromJSON)]
         public string IgnoreMeFromJSON { get; set; }
 
         // This property will be ignored When converted TO JSON
-        [JSONsharp.JSONProperty(JSONsharp.IgnoreDirection.ToJSON)]
+        [JSONSharp.JSONProperty(JSONSharp.IgnoreDirection.ToJSON)]
         public string IgnoreMeToJSON { get; set; }
 
         // This property value will be converted through the converter Methods (IJSONValueConverter Required)
-        [JSONsharp.JSONProperty(JSONsharp.ConversionDirection.Both)]
+        [JSONSharp.JSONProperty(JSONSharp.ConversionDirection.Both)]
         public string PropertyUsingConverterBothWays { get; set; }
 
         // This property value will be converted through the converter but only from JSON (IJSONValueConverter Required)
-        [JSONsharp.JSONProperty(JSONsharp.ConversionDirection.FromJSON)]
+        [JSONSharp.JSONProperty(JSONSharp.ConversionDirection.FromJSON)]
         public string PropertyUsingConverterFromJSON { get; set; }
 
     // This property will be converted through the converter but only to JSON (IJSONValueConverter Required)
-    [JSONsharp.JSONProperty(JSONsharp.ConversionDirection.ToJSON)]
+    [JSONSharp.JSONProperty(JSONSharp.ConversionDirection.ToJSON)]
         public string PropertyUsingConverterToJSON { get; set; }
-
-        // Generated from IJSONValueConverter
-        public object ConvertFromJSON(string Name, object Value, PropertyInfo Property)
+        public object ConvertFromJSON(string Name, object Value, PropertyInfo Property, Func<Dictionary<string, object>, Type, object> ConvertToType)
         {
             // make everything capitalised
             return Value.ToString().ToUpper();
         }
+
         // Generated from IJSONValueConverter
         public string ConvertToJSON(string Name, object Value, PropertyInfo Property)
         {
             // reverse the value
-            return Value.ToString().Reverse().Aggregate("", (a, c) => a + c); 
+            return "\"" +Value.ToString().Reverse().Aggregate("", (a, c) => a + c) + "\""; 
         }
     }
 }
